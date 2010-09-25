@@ -4,7 +4,6 @@ import com.blogspot.nurkiewicz.junit.UnderTest;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.StringDescription;
-import org.junit.Assert;
 import org.junit.internal.matchers.TypeSafeMatcher;
 import org.junit.rules.MethodRule;
 import org.junit.runners.model.FrameworkMethod;
@@ -62,42 +61,48 @@ public class ExceptionAssert implements MethodRule {
 	}
 
 	private class ExceptionAssertStatement extends Statement {
+
 		private final Statement base;
+
 		private Throwable exceptionThrownFromClassUnderTest;
+		private Field underTestField;
 
 		public ExceptionAssertStatement(Statement base) {
 			this.base = base;
+			underTestField = findClassUnderTestField(testCase);
 		}
 
 		@Override
 		public void evaluate() throws Throwable {
-			Field underTestField = findClassUnderTestField(testCase);
-			final Object originalClassUnderTest = wrapClassUnderTest(underTestField, testCase);
+			final Object originalClassUnderTest = wrapClassUnderTest(testCase);
 			try {
 				base.evaluate();
 			} finally {
-				unwrapClassUnderTest(underTestField, originalClassUnderTest);
+				setUnderTestField(originalClassUnderTest);
 			}
-			if (matcher == null) {
-				if(exceptionThrownFromClassUnderTest != null)
-					throw exceptionThrownFromClassUnderTest;
-			} else
-				if(exceptionThrownFromClassUnderTest == null)
-					throw new AssertionError("Expected test to throw " + StringDescription.toString(matcher));
-				else
-					assertThat(exceptionThrownFromClassUnderTest, matcher);
+			verify();
 		}
 
-		private void unwrapClassUnderTest(Field underTestField, Object originalClassUnderTest) throws IllegalAccessException {
+		private void verify() throws Throwable {
+			if (matcher == null) {
+				if (exceptionThrownFromClassUnderTest != null)
+					throw exceptionThrownFromClassUnderTest;
+			} else if (exceptionThrownFromClassUnderTest == null)
+				throw new AssertionError("Expected test to throw " + StringDescription.toString(matcher));
+			else
+				assertThat(exceptionThrownFromClassUnderTest, matcher);
+		}
+
+		private void setUnderTestField(Object originalClassUnderTest) throws IllegalAccessException {
 			underTestField.set(testCase, originalClassUnderTest);
 		}
 
-		private Object wrapClassUnderTest(Field underTestField, Object testCase) {
+		private Object wrapClassUnderTest(Object testCase) {
 			try {
 				underTestField.setAccessible(true);
 				Object classUnderTest = underTestField.get(testCase);
 				final Object wrappedClassUnderTest = wrapWithProxy(classUnderTest);
-				underTestField.set(testCase, wrappedClassUnderTest);
+				setUnderTestField(wrappedClassUnderTest);
 				return classUnderTest;
 			} catch (IllegalAccessException e) {
 				throw new IllegalStateException(e);
@@ -105,7 +110,8 @@ public class ExceptionAssert implements MethodRule {
 		}
 
 		private Object wrapWithProxy(final Object classUnderTest) {
-			return Proxy.newProxyInstance(classUnderTest.getClass().getClassLoader(), classUnderTest.getClass().getInterfaces(), new InvocationHandler() {
+			verifyClassUnderTest(classUnderTest);
+			return Proxy.newProxyInstance(classUnderTest.getClass().getClassLoader(), new Class[]{underTestField.getType()}, new InvocationHandler() {
 				@Override
 				public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 					try {
@@ -118,12 +124,25 @@ public class ExceptionAssert implements MethodRule {
 			});
 		}
 
+		private void verifyClassUnderTest(Object classUnderTest) {
+			if (!underTestField.getType().isInterface())
+				throw new IllegalArgumentException("Field marked with @UnderTest must be of interface type");
+			if (classUnderTest == null)
+				throw new IllegalArgumentException("Field marked with @UnderTest must not be null");
+		}
+
 		private Field findClassUnderTestField(Object testCase) {
 			final Field[] fields = testCase.getClass().getDeclaredFields();
+			Field underTestField = null;
 			for (Field field : fields)
 				if (field.getAnnotation(UnderTest.class) != null)
-					return field;
-			throw new IllegalArgumentException("You must mark exactly one test case field with @UnderTest annotation");
+					if (underTestField == null)
+						underTestField = field;
+					else
+						throw new IllegalArgumentException("More than one field marked with @UnderTest annotation");
+			if(underTestField == null)
+				throw new IllegalArgumentException("You must mark exactly one test case field with @UnderTest annotation");
+			return underTestField;
 		}
 
 	}
