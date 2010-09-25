@@ -1,6 +1,7 @@
 package com.blogspot.nurkiewicz.junit.exceptionassert;
 
 import com.blogspot.nurkiewicz.junit.UnderTest;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -73,6 +74,7 @@ public class ExceptionAssertTest {
 	}
 
 	@Test
+	@Ignore
 	public void shouldThrowAssertionErrorWhenExceptionExpectedButNotThrown() throws Exception {
 		//given
 		String name = "James";
@@ -85,6 +87,7 @@ public class ExceptionAssertTest {
 	}
 
 	@Test
+	@Ignore
 	public void shouldThrowOriginalExceptionIfNotExpected() throws Exception {
 		//given
 		String name = "John";
