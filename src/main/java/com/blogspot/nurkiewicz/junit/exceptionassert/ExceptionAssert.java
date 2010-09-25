@@ -80,10 +80,10 @@ public class ExceptionAssert implements MethodRule {
 			} finally {
 				setUnderTestField(originalClassUnderTest);
 			}
-			verify();
+			verifyException();
 		}
 
-		private void verify() throws Throwable {
+		private void verifyException() throws Throwable {
 			if (matcher == null) {
 				if (exceptionThrownFromClassUnderTest != null)
 					throw exceptionThrownFromClassUnderTest;
